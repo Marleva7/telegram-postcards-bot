@@ -1,20 +1,22 @@
 import os
 import random
 import sqlite3
+import asyncio
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
 
+from aiohttp import web
+
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
-from aiogram.types import FSInputFile
-import asyncio
+
 from aiogram import Bot, Dispatcher
+from aiogram.types import FSInputFile, ReplyKeyboardMarkup, KeyboardButton, Message
+from aiogram.filters import Command
+
 from dotenv import load_dotenv
 load_dotenv(dotenv_path=Path(__file__).with_name(".env"))
 
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
-from aiogram.types import Message
-from aiogram.filters import Command
 
 TOKEN = "8597860061:AAGavbkgq6THU-73tkzwzbR-pRXwIJr56Nc"
 CHANNEL_ID = -1003592743906
@@ -99,6 +101,25 @@ def list_images(category: str):
     files.sort()
     return files
 
+from aiohttp import web
+
+async def start_web_server():
+    app = web.Application()
+
+    async def health(request):
+        return web.Response(text="ok")
+
+    app.router.add_get("/", health)
+    app.router.add_get("/health", health)
+
+    runner = web.AppRunner(app)
+    await runner.setup()
+
+    port = int(os.getenv("PORT", "10000"))
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
+
+    print(f"[OK] Web server listening on port {port}")
 
 def parse_hhmm(hhmm: str):
     h, m = hhmm.split(":")
@@ -262,6 +283,7 @@ async def birthday(message: Message):
 async def main():
     init_db()
     setup_schedule()
+    await start_web_server() 
     await dp.start_polling(bot)
 
 
