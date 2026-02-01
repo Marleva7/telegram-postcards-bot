@@ -9,6 +9,7 @@ from aiohttp import web
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
+from zoneinfo import ZoneInfo
 
 from aiogram import Bot, Dispatcher
 from aiogram.types import FSInputFile, ReplyKeyboardMarkup, KeyboardButton, Message
@@ -16,6 +17,15 @@ from aiogram.filters import Command
 
 from dotenv import load_dotenv
 load_dotenv(dotenv_path=Path(__file__).with_name(".env"))
+TOKEN = os.getenv("TOKEN")
+CHANNEL_ID = int(os.getenv("CHANNEL_ID", "0"))
+
+print("DEBUG CHANNEL_ID =", CHANNEL_ID)
+
+if not TOKEN:
+    raise SystemExit("BOT_TOKEN не задан в .env")
+if not CHANNEL_ID:
+    raise SystemExit("CHANNEL_ID не задан в .env")
 
 
 TOKEN = "8597860061:AAGavbkgq6THU-73tkzwzbR-pRXwIJr56Nc"
@@ -41,7 +51,6 @@ keyboard = ReplyKeyboardMarkup(
 
 BASE_DIR = Path(__file__).parent
 CARDS_DIR = BASE_DIR / "cards"
-CHANNEL_ID = int(os.getenv("CHANNEL_ID", "0"))
 
 SUPPORTED_EXT = {".png", ".jpg", ".jpeg", ".webp"}
 
@@ -65,7 +74,8 @@ sent_cache = {
 
 last_birthday_utc = None
 
-scheduler = AsyncIOScheduler()
+TZ = ZoneInfo("Etc/GMT-3")  # UTC+3
+scheduler = AsyncIOScheduler(timezone=TZ)
 DB_PATH = BASE_DIR / "bot.db"
 
 def init_db():
@@ -230,30 +240,52 @@ async def send_birthday_if_due():
 def setup_schedule():
     h, m = parse_hhmm(MORNING_TIME)
     scheduler.add_job(
-        lambda: asyncio.create_task(send_random("morning")),
-        CronTrigger(hour=h, minute=m)
+        send_random,
+        trigger=CronTrigger(hour=h, minute=m, timezone=TZ),
+        args=("morning",),
+        id="morning",
+        replace_existing=True,
+        misfire_grace_time=3600,
+        coalesce=True,
     )
 
     h, m = parse_hhmm(EVENING_TIME)
     scheduler.add_job(
-        lambda: asyncio.create_task(send_random("evening")),
-        CronTrigger(hour=h, minute=m)
+        send_random,
+        trigger=CronTrigger(hour=h, minute=m, timezone=TZ),
+        args=("evening",),
+        id="evening",
+        replace_existing=True,
+        misfire_grace_time=3600,
+        coalesce=True,
     )
 
     h, m = parse_hhmm(NIGHT_TIME)
     scheduler.add_job(
-        lambda: asyncio.create_task(send_random("night")),
-        CronTrigger(hour=h, minute=m)
+        send_random,
+        trigger=CronTrigger(hour=h, minute=m, timezone=TZ),
+        args=("night",),
+        id="night",
+        replace_existing=True,
+        misfire_grace_time=3600,
+        coalesce=True,
     )
 
     h, m = parse_hhmm(BIRTHDAY_CHECK_TIME)
     scheduler.add_job(
-        lambda: asyncio.create_task(send_birthday_if_due()),
-        CronTrigger(hour=h, minute=m)
+        send_birthday_if_due,
+        trigger=CronTrigger(hour=h, minute=m, timezone=TZ),
+        id="birthday_check",
+        replace_existing=True,
+        misfire_grace_time=3600,
+        coalesce=True,
     )
 
     scheduler.start()
-    print("[OK] Планировщик запущен")
+    print("[OK] Планировщик запущен, TZ =", TZ)
+    for job in scheduler.get_jobs():
+        print("[JOB]", job.id, "next:", job.next_run_time)
+
 @dp.message(Command("test_night"))
 async def test_night(message: Message):
     await send_random("night")
